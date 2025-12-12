@@ -214,7 +214,7 @@ mod tests {
 
     #[test]
     fn mul() {
-        let mut binding = (Mersenne31Complex::new(Mersenne31Field::TWO, Mersenne31Field::TWO));
+        let mut binding = Mersenne31Complex::new(Mersenne31Field::TWO, Mersenne31Field::TWO);
         let mut result = binding.mul_assign(&Mersenne31Complex::new(Mersenne31Field::from_u64(4).unwrap(), Mersenne31Field::from_u64(5).unwrap()));
         assert_eq!(
             *result,

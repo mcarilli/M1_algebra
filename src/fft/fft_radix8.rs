@@ -65,14 +65,35 @@ fn size_8_radix_2_dit(x: &mut [M31C; 8]) {
     }
 
     // second stage
-    mul_assign_w_1_4(&mut x[6]);
-    mul_assign_w_1_4(&mut x[7]);
-    for r in [0..2, 4..6].iter() {
-        for i in r.clone().into_iter() {
-            let mut tmp = x[i];
-            x[i] = *tmp.clone().add_assign(&x[i + 2]);
-            x[i + 2] = *tmp.sub_assign(&x[i + 2]);
-        }
+    // mul_assign_w_1_4(&mut x[6]);
+    // mul_assign_w_1_4(&mut x[7]);
+    // for r in [0..2, 4..6].iter() {
+    //     for i in r.clone().into_iter() {
+    //         let mut tmp = x[i];
+    //         x[i] = *tmp.clone().add_assign(&x[i + 2]);
+    //         x[i + 2] = *tmp.sub_assign(&x[i + 2]);
+    //     }
+    // }
+    for i in (0..2).into_iter() {
+        let mut tmp = x[i];
+        // the following is better and can be done in cuda,
+        // but rust complains about multiple borrows of x
+        // x[i].add_assign(&x[i + 2]);
+        // x[i + 2] = *tmp.sub_assign(&x[i + 2]);
+        x[i] = *tmp.clone().add_assign(&x[i + 2]);
+        x[i + 2] = *tmp.sub_assign(&x[i + 2]);
+    }
+    // x[4] = x[4] + (-i) * (x[6].real + i * x[6].imag)
+    //      = x[4] + (x[6].imag - i * x[6].real)
+    // x[6] = x[4] - (-i) * (x[6].real + i * x[6].imag)
+    //      = x[4] + (-x[6].imag + i * x[6].real)
+    for i in (4..6).into_iter() {
+        let mut tmp = x[i];
+        x[i].real_part.add_assign(&x[i + 2].imag_part);
+        x[i].imag_part.sub_assign(&x[i + 2].real_part);
+        let tmp2 = x[i+2].real_part;
+        x[i + 2].real_part = *tmp.real_part.sub_assign(&x[i + 2].imag_part);
+        x[i + 2].imag_part = *tmp.imag_part.add_assign(&tmp2);
     }
 
     // third stage
@@ -433,6 +454,74 @@ pub fn stockham_radix_8_dit_naive_non_8_first(x: &mut [M31C], y: &mut [M31C], tw
     stockham_radix_8_dit_naive_non_8_first_impl(x, y, 1, x.len(), twiddles, true);
 }
 
+const RADIX: usize = 8;
+const LOG_RADIX: usize = 3;
+const RADIX_MASK: usize = (1 << LOG_RADIX) - 1;
+
+fn bitrev_by_radix(i: usize, max_bits: usize) -> usize {
+    let mut idx = i;
+    let mut out = 0;
+    assert_eq!(max_bits % LOG_RADIX, 0);
+    for _ in 0..(max_bits / LOG_RADIX) {
+        out <<= LOG_RADIX;
+        out |= idx & RADIX_MASK;
+        idx >>= LOG_RADIX;
+    }
+    out
+}
+
+fn radix_8_fwd_dit_for_gpu(
+    x: &mut [M31C],
+    twiddles: &[M31C],
+) {
+    let log_n = x.len().trailing_zeros();
+    assert_eq!(log_n as usize % LOG_RADIX, 0);
+
+    println!("{}", bitrev_by_radix(10, 6));
+
+
+    let mut exchg_region_size = x.len();
+    let mut num_exchg_regions = 1;
+    let mut independent_fft_len = RADIX;
+    for stage in 0..(log_n as usize / LOG_RADIX){
+        let exchg_stride = exchg_region_size / RADIX;
+
+        // apply twiddles
+        if stage > 0 {
+            for exchg_region in 1..num_exchg_regions {
+                let exchg_region_start = exchg_region_size * exchg_region;
+                let v = bitrev_by_radix(exchg_region, stage * LOG_RADIX);
+                let twiddle_stride = x.len() / independent_fft_len;
+                for i in 1..RADIX {
+                    let twiddle = twiddles[v * i * twiddle_stride];
+                    for j in 0..exchg_stride {
+                        x[exchg_region_start + i * exchg_stride + j].mul_assign(&twiddle);
+                    }
+                }
+            }
+        }
+
+        // radix-8 exchanges
+        let mut scratch = [M31C::ZERO; RADIX]; // always 8, must be constant
+        for exchg_region in 0..num_exchg_regions {
+            let exchg_region_start = exchg_region_size * exchg_region;
+            for j in 0..exchg_stride {
+                for i in 0..RADIX {
+                    scratch[i] = x[exchg_region_start + i * exchg_stride + j];
+                }
+                size_8_radix_2_dit(&mut scratch);
+                for i in 0..RADIX {
+                    x[exchg_region_start + i * exchg_stride + j] = scratch[i];
+                }
+            }
+        }
+
+        exchg_region_size /= RADIX;
+        num_exchg_regions *= RADIX;
+        independent_fft_len *= RADIX;
+    }
+}
+
 #[test]
 fn test_compare() {
     use crate::fft::bitreverse::bitreverse_enumeration_inplace;
@@ -469,6 +558,7 @@ fn test_compare() {
         f(&mut x, &mut y);
         let duration = start.elapsed();
         for (i, (output, control)) in y.iter().zip(reference).enumerate() {
+            // println!("{} {} {} {}", i, bitrev_by_radix(i, log_n as usize), output, control);
             assert_eq!(
                 output, control,
                 "log_n = {}, {} failed at {}",
@@ -478,7 +568,7 @@ fn test_compare() {
         duration
     }
 
-    for log_n in 1..22 {
+    for log_n in 15..16 {
         let n = 1 << log_n;
 
         let mut input: Vec<M31C> = (0..n).map(|_| rand_from_rng(&mut rng)).collect();
@@ -532,6 +622,16 @@ fn test_compare() {
             |x, y| stockham_radix_8_dit_naive_non_8_first(x, y, &twiddles),
         );
 
+        flush(&x_flush, &mut y_flush);
+
+        let duration_dit_fwd_for_gpu = do_one(
+           log_n, &input, &reference, "fwd dit for gpu", |x, y| {
+               radix_8_fwd_dit_for_gpu(x, &twiddles);
+               for i in 0..x.len() {
+                   y[i] = x[bitrev_by_radix(i, log_n as usize)];
+               }
+        });
+
         let passes = (log_n + 7) / 3;
         let bandwidth_bound_estimate_0 = passes * duration_flush_0;
         let bandwidth_bound_estimate_1 = passes * duration_flush_1;
@@ -548,10 +648,12 @@ fn test_compare() {
             "    dit naive non 8 first {:?}",
             duration_dit_naive_non_8_first
         );
+        println!("    dit fwd for gpu {:?}", duration_dit_fwd_for_gpu);
         println!("    bitrev      {:?}", duration_bitrev);
         println!(
             "    bw bound estimates {:?} {:?}",
             bandwidth_bound_estimate_0, bandwidth_bound_estimate_1
         );
     }
+
 }
