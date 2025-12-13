@@ -1,6 +1,6 @@
+use crate::field::Field;
 use crate::m1::Mersenne31Field;
 use crate::m1complex::Mersenne31Complex;
-use crate::field::Field;
 
 type M31F = Mersenne31Field;
 type M31C = Mersenne31Complex;
@@ -91,7 +91,7 @@ fn size_8_radix_2_dit(x: &mut [M31C; 8]) {
         let mut tmp = x[i];
         x[i].real_part.add_assign(&x[i + 2].imag_part);
         x[i].imag_part.sub_assign(&x[i + 2].real_part);
-        let tmp2 = x[i+2].real_part;
+        let tmp2 = x[i + 2].real_part;
         x[i + 2].real_part = *tmp.real_part.sub_assign(&x[i + 2].imag_part);
         x[i + 2].imag_part = *tmp.imag_part.add_assign(&tmp2);
     }
@@ -499,10 +499,7 @@ fn bitrev_by_radix<T: Radix>(i: usize, max_bits: usize) -> usize {
 }
 
 #[allow(dead_code)]
-fn radix_8_dit_fwd_for_gpu(
-    x: &mut [M31C],
-    twiddles: &[M31C],
-) {
+fn radix_8_dit_fwd_for_gpu(x: &mut [M31C], twiddles: &[M31C]) {
     let log_n = x.len().trailing_zeros();
     assert_eq!(log_n as usize % LOG_RADIX, 0);
 
@@ -550,10 +547,7 @@ fn radix_8_dit_fwd_for_gpu(
 }
 
 #[allow(dead_code)]
-fn radix_8_dif_inv_for_gpu(
-    x: &mut [M31C],
-    twiddles: &[M31C],
-) {
+fn radix_8_dif_inv_for_gpu(x: &mut [M31C], twiddles: &[M31C]) {
     let log_n = x.len().trailing_zeros();
     assert_eq!(log_n as usize % LOG_RADIX, 0);
 
@@ -583,7 +577,8 @@ fn radix_8_dif_inv_for_gpu(
         if stage < num_stages - 1 {
             for exchg_region in 1..num_exchg_regions {
                 let exchg_region_start = exchg_region_size * exchg_region;
-                let v = bitrev_by_radix::<Radix8>(exchg_region, (num_stages - 1 - stage) * LOG_RADIX);
+                let v =
+                    bitrev_by_radix::<Radix8>(exchg_region, (num_stages - 1 - stage) * LOG_RADIX);
                 let twiddle_stride = x.len() / independent_fft_len;
                 for i in 1..RADIX {
                     let twiddle = twiddles[v * i * twiddle_stride];
@@ -703,23 +698,23 @@ fn test_compare() {
 
         flush(&x_flush, &mut y_flush);
 
-        let duration_dit_fwd_for_gpu = do_one(
-           log_n, &input, &reference, "fwd dit for gpu", |x, y| {
-               radix_8_dit_fwd_for_gpu(x, &twiddles);
-               for i in 0..x.len() {
-                   y[i] = x[bitrev_by_radix::<Radix8>(i, log_n as usize)];
-               }
-        });
+        let duration_dit_fwd_for_gpu =
+            do_one(log_n, &input, &reference, "fwd dit for gpu", |x, y| {
+                radix_8_dit_fwd_for_gpu(x, &twiddles);
+                for i in 0..x.len() {
+                    y[i] = x[bitrev_by_radix::<Radix8>(i, log_n as usize)];
+                }
+            });
 
         flush(&x_flush, &mut y_flush);
 
-        let duration_dif_inv_for_gpu = do_one(
-           log_n, &input, &reference, "fwd dit for gpu", |x, y| {
-               for i in 0..x.len() {
-                   y[i] = x[bitrev_by_radix::<Radix8>(i, log_n as usize)];
-               }
-               radix_8_dif_inv_for_gpu(y, &twiddles);
-        });
+        let duration_dif_inv_for_gpu =
+            do_one(log_n, &input, &reference, "fwd dit for gpu", |x, y| {
+                for i in 0..x.len() {
+                    y[i] = x[bitrev_by_radix::<Radix8>(i, log_n as usize)];
+                }
+                radix_8_dif_inv_for_gpu(y, &twiddles);
+            });
 
         let passes = (log_n + 7) / 3;
         let bandwidth_bound_estimate_0 = passes * duration_flush_0;
@@ -745,5 +740,4 @@ fn test_compare() {
             bandwidth_bound_estimate_0, bandwidth_bound_estimate_1
         );
     }
-
 }
