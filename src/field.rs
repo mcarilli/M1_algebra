@@ -61,7 +61,6 @@ pub trait Field:
 
         product
     }
-    #[inline(always)]
     fn from_u32_with_reduction(value: u64) -> Self;
 }
 pub trait FieldExtension<const DEGREE: usize>:

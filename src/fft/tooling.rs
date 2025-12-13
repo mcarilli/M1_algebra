@@ -48,7 +48,7 @@ pub fn domain_generator_for_size<E: TwoAdicField>(size: u64) -> E {
     // debug_assert!(size.is_power_of_two());
     debug_assert!(size.trailing_zeros() as usize <= E::TWO_ADICITY);
 
-    let mut omega = E::two_adic_generator(size.trailing_zeros() as usize);
+    let omega = E::two_adic_generator(size.trailing_zeros() as usize);
 
     omega
 }

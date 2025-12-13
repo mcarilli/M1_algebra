@@ -287,6 +287,7 @@ fn fft_naive_to_bitreversed<E: TwoAdicField>(
 
     serial_ct_ntt_natural_to_bitreversed(input, log_n as u32, twiddles);
 }
+#[allow(dead_code)]
 fn naive_dft(input: &mut [Mersenne31Complex]
 ) -> Vec<Mersenne31Complex>{
 
@@ -428,7 +429,7 @@ fn test_lde_naive() {
     let mut acc = Mersenne31Field::ZERO;
 
     let mut poly = Vec::with_capacity(poly_size);
-    for i in 0..poly_size-1 {
+    for _ in 0..poly_size-1 {
         let tmp = rand2_from_rng(&mut rng);
         poly.push(tmp);
         acc.add_assign(&tmp);
@@ -475,7 +476,7 @@ fn test_lde_twisted_naive() {
     let mut acc = Mersenne31Field::ZERO;
 
     let mut poly = Vec::with_capacity(poly_size);
-    for i in 0..poly_size-1 {
+    for _ in 0..poly_size-1 {
         let tmp = rand2_from_rng(&mut rng);
         poly.push(tmp);
         acc.add_assign(&tmp);
@@ -485,8 +486,7 @@ fn test_lde_twisted_naive() {
 
     let resize = 5;
 
-    let extended = lde_twisted_naive(&poly, resize, &worker);
-
+    let _extended = lde_twisted_naive(&poly, resize, &worker);
 }
 
 
@@ -558,7 +558,7 @@ fn test_lde_packed() {
     let mut acc = Mersenne31Field::ZERO;
 
     let mut poly = Vec::with_capacity(poly_size);
-    for i in 0..poly_size-1 {
+    for _ in 0..poly_size-1 {
         let tmp = rand2_from_rng(&mut rng);
         poly.push(tmp);
         acc.add_assign(&tmp);
@@ -595,7 +595,7 @@ pub fn lde_compress(
 
     w[0] = Mersenne31Complex::ZERO;
 
-    let mut omega = Mersenne31Complex::two_adic_generator(base_bits + resize)
+    let omega = Mersenne31Complex::two_adic_generator(base_bits + resize)
         .inverse().expect("must always exist for domain generator");
 
 
@@ -846,10 +846,10 @@ fn test_over_mersennetrick(){
         
         let mut b: Vec<Mersenne31Field> =
             (0..poly_size).map(|_| rand2_from_rng(&mut rng)).collect();
-        let mut a_copy = a.clone();
+        let a_copy = a.clone();
         let b_copy = b.clone();
     
-        let mut fft_a = fft_with_tricks_for_mersenne(&mut a, &worker);
+        let fft_a = fft_with_tricks_for_mersenne(&mut a, &worker);
         let fft_b = fft_with_tricks_for_mersenne(&mut b, &worker);
 
         let mut fft_c: Vec<Mersenne31Complex> = vec![];

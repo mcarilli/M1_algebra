@@ -5,7 +5,6 @@ use core::fmt::Display;
 use core::fmt::Formatter;
 use core::fmt::Debug;
 use core::hash::Hasher;
-use std::fmt;
 use std::ops::BitXorAssign;
 
 use crate::field::Field;
@@ -37,6 +36,7 @@ impl Mersenne31Field{
         }
         Self::new(c)
     }
+    #[allow(dead_code)]
     fn mul_2exp_u64(&self, exp: u64) -> Self {
         // In a Mersenne field, multiplication by 2^k is just a left rotation by k bits.
         let exp = (exp % 31) as u8;
@@ -56,6 +56,7 @@ impl Mersenne31Field{
         Self::new(rotated)
     }
 
+    #[allow(dead_code)]
     fn exp_power_of_2(&self, power_log: usize) -> Self {
         let mut res = *self;
         for _ in 0..power_log {
@@ -248,7 +249,7 @@ impl FieldExtension<2> for Mersenne31Field{
 
     type BaseField = Mersenne31Field;
 
-    fn two_adic_generator(bits: usize) -> Self {
+    fn two_adic_generator(_bits: usize) -> Self {
         todo!()
     }
 }
@@ -521,6 +522,6 @@ mod tests {
     #[test]
     fn test_count(){
         let num = Mersenne31Field::from_u64(5).unwrap();
-        let a = num.exp_power_of_2(2);
+        let _a = num.exp_power_of_2(2);
     }
 }

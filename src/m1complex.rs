@@ -1,7 +1,7 @@
 
 use std::fmt::{Display, Formatter};
 
-use crate::{field::{Field, FieldExtension, TwoAdicField}, m1::Mersenne31Field};
+use crate::{field::{Field, TwoAdicField}, m1::Mersenne31Field};
 
 #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug, Default)]
 pub struct Mersenne31Complex {
@@ -21,17 +21,18 @@ impl Mersenne31Complex {
         Self { real_part: real, imag_part: Mersenne31Field::ZERO, }
     }
 
+    #[allow(dead_code)]
     fn mul_naive(&'_ mut self, other: &Self) -> Self {
         let mut tmp = self.real_part;
-        let mut real_chunk_1 = tmp.mul_assign(&other.real_part);
+        let real_chunk_1 = tmp.mul_assign(&other.real_part);
         let mut tmp = self.imag_part;
         let real_chank_2 = tmp.mul_assign(&other.imag_part);
-        let mut real = real_chunk_1.sub_assign(&real_chank_2);
+        let real = real_chunk_1.sub_assign(&real_chank_2);
         let mut binding = self.real_part;
         let tmp = binding.mul_assign(&other.imag_part);
         let mut binding = self.imag_part;
         let tmp2 = binding.mul_assign(&other.real_part);
-        let mut imag =  tmp.add_assign(&tmp2);
+        let imag =  tmp.add_assign(&tmp2);
         Self::new(*real, *imag)
     }
     pub fn exp_power_of_2(&'_ mut self, power_log: usize) -> Self {
@@ -86,11 +87,11 @@ impl Field for Mersenne31Complex {
         unreachable!()
     }
 
-    fn from_u64_unchecked(value: u64) -> Self {
+    fn from_u64_unchecked(_value: u64) -> Self {
         unreachable!()
     }
 
-    fn from_u64(value: u64) -> Option<Self> {
+    fn from_u64(_value: u64) -> Option<Self> {
         unreachable!()
     }
 
@@ -215,10 +216,10 @@ mod tests {
     #[test]
     fn mul() {
         let mut binding = Mersenne31Complex::new(Mersenne31Field::TWO, Mersenne31Field::TWO);
-        let mut result = binding.mul_assign(&Mersenne31Complex::new(Mersenne31Field::from_u64(4).unwrap(), Mersenne31Field::from_u64(5).unwrap()));
+        let result = binding.mul_assign(&Mersenne31Complex::new(Mersenne31Field::from_u64(4).unwrap(), Mersenne31Field::from_u64(5).unwrap()));
         assert_eq!(
             *result,
-            Mersenne31Complex::new(*Mersenne31Field::TWO.negate(), Mersenne31Field::from_u64(18).unwrap())
+            Mersenne31Complex::new(*Mersenne31Field::TWO.clone().negate(), Mersenne31Field::from_u64(18).unwrap())
 
         );
     }
