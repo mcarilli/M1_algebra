@@ -454,54 +454,35 @@ pub fn stockham_radix_8_dit_naive_non_8_first(x: &mut [M31C], y: &mut [M31C], tw
     stockham_radix_8_dit_naive_non_8_first_impl(x, y, 1, x.len(), twiddles, true);
 }
 
-const RADIX: usize = 8;
-const LOG_RADIX: usize = 3;
-
 // https://doc.rust-lang.org/reference/items/associated-items.html#associated-constants-examples
 #[allow(dead_code)]
 trait Radix {
-    type Scratch;
     const RADIX: usize;
     const LOG_RADIX: usize;
     const RADIX_MASK: usize;
-    fn exchg(&mut self);
-    fn get_scratch(&mut self) -> &mut [M31C];
+    fn exchg(x: &mut [M31C; 8]);
 }
 
-#[derive(Default)]
-struct Radix4 {
-    scratch: [M31C; 4],
-}
-
-#[derive(Default)]
-struct Radix8 {
-    scratch: [M31C; 8],
-}
+struct Radix4 {}
+struct Radix8 {}
 
 #[allow(dead_code)]
 impl Radix for Radix4 {
-    type Scratch = [M31C; 4];
     const RADIX: usize = 4;
     const LOG_RADIX: usize = 2;
     const RADIX_MASK: usize = 3;
-    fn get_scratch(&mut self) -> &mut [M31C] {
-        &mut self.scratch
-    }
-    fn exchg() {
-        size_4_radix_2_dit(&mut self.scratch);
+    fn exchg(x: &mut [M31C; 8]) {
+        size_4_radix_2_dit(x);
     }
 }
 
+#[allow(dead_code)]
 impl Radix for Radix8 {
-    type Scratch = [M31C; 4];
     const RADIX: usize = 8;
     const LOG_RADIX: usize = 3;
     const RADIX_MASK: usize = 7;
-    fn get_scratch(&mut self) -> &mut [M31C] {
-        &mut self.scratch
-    }
-    fn exchg(&mut self) {
-        size_8_radix_2_dit(&mut self.scratch);
+    fn exchg(x: &mut [M31C; 8]) {
+        size_8_radix_2_dit(x);
     }
 }
 
@@ -518,26 +499,25 @@ fn bitrev_by_radix<T: Radix>(i: usize, max_bits: usize) -> usize {
 }
 
 #[allow(dead_code)]
-fn radix_8_dit_fwd_for_gpu<T: Radix + Default>(x: &mut [M31C], twiddles: &[M31C]) {
+fn radix_n_dit_fwd_for_gpu<T: Radix>(x: &mut [M31C], twiddles: &[M31C]) {
     let log_n = x.len().trailing_zeros();
-    assert_eq!(log_n as usize % LOG_RADIX, 0);
+    assert_eq!(log_n as usize % T::LOG_RADIX, 0);
 
-    let mut sub_dft_handler = T::default();
-
-    let num_stages = log_n as usize / LOG_RADIX;
+    let mut scratch = [M31C::ZERO; 8];
+    let num_stages = log_n as usize / T::LOG_RADIX;
     let mut exchg_region_size = x.len();
     let mut num_exchg_regions = 1;
-    let mut independent_fft_len = RADIX;
+    let mut independent_fft_len = T::RADIX;
     for stage in 0..num_stages {
-        let exchg_stride = exchg_region_size / RADIX;
+        let exchg_stride = exchg_region_size / T::RADIX;
 
         // apply twiddles
         if stage > 0 {
             for exchg_region in 1..num_exchg_regions {
                 let exchg_region_start = exchg_region_size * exchg_region;
-                let v = bitrev_by_radix::<Radix8>(exchg_region, stage * LOG_RADIX);
+                let v = bitrev_by_radix::<T>(exchg_region, stage * T::LOG_RADIX);
                 let twiddle_stride = x.len() / independent_fft_len;
-                for i in 1..RADIX {
+                for i in 1..T::RADIX {
                     let twiddle = twiddles[v * i * twiddle_stride];
                     for j in 0..exchg_stride {
                         x[exchg_region_start + i * exchg_stride + j].mul_assign(&twiddle);
@@ -546,49 +526,48 @@ fn radix_8_dit_fwd_for_gpu<T: Radix + Default>(x: &mut [M31C], twiddles: &[M31C]
             }
         }
 
-        // radix-8 exchanges
-        let scratch = sub_dft_handler.get_scratch(); // always 8, must be constant
+        // radix-n exchanges
         for exchg_region in 0..num_exchg_regions {
             let exchg_region_start = exchg_region_size * exchg_region;
             for j in 0..exchg_stride {
-                for i in 0..RADIX {
+                for i in 0..T::RADIX {
                     scratch[i] = x[exchg_region_start + i * exchg_stride + j];
                 }
-                size_8_radix_2_dit(&mut scratch);
-                for i in 0..RADIX {
+                T::exchg(&mut scratch);
+                for i in 0..T::RADIX {
                     x[exchg_region_start + i * exchg_stride + j] = scratch[i];
                 }
             }
         }
 
-        exchg_region_size /= RADIX;
-        num_exchg_regions *= RADIX;
-        independent_fft_len *= RADIX;
+        exchg_region_size /= T::RADIX;
+        num_exchg_regions *= T::RADIX;
+        independent_fft_len *= T::RADIX;
     }
 }
 
 #[allow(dead_code)]
-fn radix_8_dif_inv_for_gpu(x: &mut [M31C], twiddles: &[M31C]) {
+fn radix_n_dif_inv_for_gpu<T: Radix>(x: &mut [M31C], twiddles: &[M31C]) {
     let log_n = x.len().trailing_zeros();
-    assert_eq!(log_n as usize % LOG_RADIX, 0);
+    assert_eq!(log_n as usize % T::LOG_RADIX, 0);
 
-    let num_stages = log_n as usize / LOG_RADIX;
-    let mut exchg_region_size = 8;
-    let mut num_exchg_regions = x.len() / 8;
+    let mut scratch = [M31C::ZERO; 8];
+    let num_stages = log_n as usize / T::LOG_RADIX;
+    let mut exchg_region_size = T::RADIX;
+    let mut num_exchg_regions = x.len() / T::RADIX;
     let mut independent_fft_len = x.len();
     for stage in 0..num_stages {
-        let exchg_stride = exchg_region_size / RADIX;
+        let exchg_stride = exchg_region_size / T::RADIX;
 
-        // radix-8 exchanges
-        let mut scratch = [M31C::ZERO; RADIX]; // always 8, must be constant
+        // radix-n exchanges
         for exchg_region in 0..num_exchg_regions {
             let exchg_region_start = exchg_region_size * exchg_region;
             for j in 0..exchg_stride {
-                for i in 0..RADIX {
+                for i in 0..T::RADIX {
                     scratch[i] = x[exchg_region_start + i * exchg_stride + j];
                 }
-                size_8_radix_2_dit(&mut scratch);
-                for i in 0..RADIX {
+                T::exchg(&mut scratch);
+                for i in 0..T::RADIX {
                     x[exchg_region_start + i * exchg_stride + j] = scratch[i];
                 }
             }
@@ -599,9 +578,9 @@ fn radix_8_dif_inv_for_gpu(x: &mut [M31C], twiddles: &[M31C]) {
             for exchg_region in 1..num_exchg_regions {
                 let exchg_region_start = exchg_region_size * exchg_region;
                 let v =
-                    bitrev_by_radix::<Radix8>(exchg_region, (num_stages - 1 - stage) * LOG_RADIX);
+                    bitrev_by_radix::<T>(exchg_region, (num_stages - 1 - stage) * T::LOG_RADIX);
                 let twiddle_stride = x.len() / independent_fft_len;
-                for i in 1..RADIX {
+                for i in 1..T::RADIX {
                     let twiddle = twiddles[v * i * twiddle_stride];
                     for j in 0..exchg_stride {
                         x[exchg_region_start + i * exchg_stride + j].mul_assign(&twiddle);
@@ -610,9 +589,9 @@ fn radix_8_dif_inv_for_gpu(x: &mut [M31C], twiddles: &[M31C]) {
             }
         }
 
-        exchg_region_size *= RADIX;
-        num_exchg_regions /= RADIX;
-        independent_fft_len /= RADIX;
+        exchg_region_size *= T::RADIX;
+        num_exchg_regions /= T::RADIX;
+        independent_fft_len /= T::RADIX;
     }
 }
 
@@ -663,7 +642,7 @@ fn test_compare() {
         duration
     }
 
-    for log_n in 15..16 {
+    for log_n in 12..13 {
         let n = 1 << log_n;
 
         let input: Vec<M31C> = (0..n).map(|_| rand_from_rng(&mut rng)).collect();
@@ -719,9 +698,9 @@ fn test_compare() {
 
         flush(&x_flush, &mut y_flush);
 
-        let duration_dit_fwd_for_gpu =
-            do_one(log_n, &input, &reference, "fwd dit for gpu", |x, y| {
-                radix_8_dit_fwd_for_gpu::<8>(x, &twiddles);
+        let duration_radix_8_dit_fwd_for_gpu =
+            do_one(log_n, &input, &reference, "radix 8 fwd dit for gpu", |x, y| {
+                radix_n_dit_fwd_for_gpu::<Radix8>(x, &twiddles);
                 for i in 0..x.len() {
                     y[i] = x[bitrev_by_radix::<Radix8>(i, log_n as usize)];
                 }
@@ -729,13 +708,34 @@ fn test_compare() {
 
         flush(&x_flush, &mut y_flush);
 
-        let duration_dif_inv_for_gpu =
-            do_one(log_n, &input, &reference, "fwd dit for gpu", |x, y| {
+        let duration_radix_8_dif_inv_for_gpu =
+            do_one(log_n, &input, &reference, "radix 8 fwd dit for gpu", |x, y| {
                 for i in 0..x.len() {
                     y[i] = x[bitrev_by_radix::<Radix8>(i, log_n as usize)];
                 }
-                radix_8_dif_inv_for_gpu(y, &twiddles);
+                radix_n_dif_inv_for_gpu::<Radix8>(y, &twiddles);
             });
+
+        flush(&x_flush, &mut y_flush);
+
+        let duration_radix_4_dit_fwd_for_gpu =
+            do_one(log_n, &input, &reference, "radix 4 fwd dit for gpu", |x, y| {
+                radix_n_dit_fwd_for_gpu::<Radix4>(x, &twiddles);
+                for i in 0..x.len() {
+                    y[i] = x[bitrev_by_radix::<Radix4>(i, log_n as usize)];
+                }
+            });
+
+        flush(&x_flush, &mut y_flush);
+
+        let duration_radix_4_dif_inv_for_gpu =
+            do_one(log_n, &input, &reference, "radix 4 inv dif for gpu", |x, y| {
+                for i in 0..x.len() {
+                    y[i] = x[bitrev_by_radix::<Radix4>(i, log_n as usize)];
+                }
+                radix_n_dif_inv_for_gpu::<Radix4>(y, &twiddles);
+            });
+
 
         let passes = (log_n + 7) / 3;
         let bandwidth_bound_estimate_0 = passes * duration_flush_0;
@@ -753,8 +753,10 @@ fn test_compare() {
             "    dit naive non 8 first {:?}",
             duration_dit_naive_non_8_first
         );
-        println!("    dit fwd for gpu {:?}", duration_dit_fwd_for_gpu);
-        println!("    dif inv for gpu {:?}", duration_dif_inv_for_gpu);
+        println!("    radix 8 dit fwd for gpu {:?}", duration_radix_8_dit_fwd_for_gpu);
+        println!("    radix 8 dif inv for gpu {:?}", duration_radix_8_dif_inv_for_gpu);
+        println!("    radix 4 dit fwd for gpu {:?}", duration_radix_4_dit_fwd_for_gpu);
+        println!("    radix 4 dif inv for gpu {:?}", duration_radix_4_dif_inv_for_gpu);
         println!("    bitrev      {:?}", duration_bitrev);
         println!(
             "    bw bound estimates {:?} {:?}",
