@@ -577,8 +577,7 @@ fn radix_n_dif_inv_for_gpu<T: Radix>(x: &mut [M31C], twiddles: &[M31C]) {
         if stage < num_stages - 1 {
             for exchg_region in 1..num_exchg_regions {
                 let exchg_region_start = exchg_region_size * exchg_region;
-                let v =
-                    bitrev_by_radix::<T>(exchg_region, (num_stages - 1 - stage) * T::LOG_RADIX);
+                let v = bitrev_by_radix::<T>(exchg_region, (num_stages - 1 - stage) * T::LOG_RADIX);
                 let twiddle_stride = x.len() / independent_fft_len;
                 for i in 1..T::RADIX {
                     let twiddle = twiddles[v * i * twiddle_stride];
@@ -698,44 +697,63 @@ fn test_compare() {
 
         flush(&x_flush, &mut y_flush);
 
-        let duration_radix_8_dit_fwd_for_gpu =
-            do_one(log_n, &input, &reference, "radix 8 fwd dit for gpu", |x, y| {
+        let duration_radix_8_dit_fwd_for_gpu = do_one(
+            log_n,
+            &input,
+            &reference,
+            "radix 8 fwd dit for gpu",
+            |x, y| {
                 radix_n_dit_fwd_for_gpu::<Radix8>(x, &twiddles);
                 for i in 0..x.len() {
                     y[i] = x[bitrev_by_radix::<Radix8>(i, log_n as usize)];
                 }
-            });
+            },
+        );
 
         flush(&x_flush, &mut y_flush);
 
-        let duration_radix_8_dif_inv_for_gpu =
-            do_one(log_n, &input, &reference, "radix 8 fwd dit for gpu", |x, y| {
+        let duration_radix_8_dif_inv_for_gpu = do_one(
+            log_n,
+            &input,
+            &reference,
+            "radix 8 fwd dit for gpu",
+            |x, y| {
                 for i in 0..x.len() {
                     y[i] = x[bitrev_by_radix::<Radix8>(i, log_n as usize)];
                 }
                 radix_n_dif_inv_for_gpu::<Radix8>(y, &twiddles);
-            });
+            },
+        );
 
         flush(&x_flush, &mut y_flush);
 
-        let duration_radix_4_dit_fwd_for_gpu =
-            do_one(log_n, &input, &reference, "radix 4 fwd dit for gpu", |x, y| {
+        let duration_radix_4_dit_fwd_for_gpu = do_one(
+            log_n,
+            &input,
+            &reference,
+            "radix 4 fwd dit for gpu",
+            |x, y| {
                 radix_n_dit_fwd_for_gpu::<Radix4>(x, &twiddles);
                 for i in 0..x.len() {
                     y[i] = x[bitrev_by_radix::<Radix4>(i, log_n as usize)];
                 }
-            });
+            },
+        );
 
         flush(&x_flush, &mut y_flush);
 
-        let duration_radix_4_dif_inv_for_gpu =
-            do_one(log_n, &input, &reference, "radix 4 inv dif for gpu", |x, y| {
+        let duration_radix_4_dif_inv_for_gpu = do_one(
+            log_n,
+            &input,
+            &reference,
+            "radix 4 inv dif for gpu",
+            |x, y| {
                 for i in 0..x.len() {
                     y[i] = x[bitrev_by_radix::<Radix4>(i, log_n as usize)];
                 }
                 radix_n_dif_inv_for_gpu::<Radix4>(y, &twiddles);
-            });
-
+            },
+        );
 
         let passes = (log_n + 7) / 3;
         let bandwidth_bound_estimate_0 = passes * duration_flush_0;
@@ -753,10 +771,22 @@ fn test_compare() {
             "    dit naive non 8 first {:?}",
             duration_dit_naive_non_8_first
         );
-        println!("    radix 8 dit fwd for gpu {:?}", duration_radix_8_dit_fwd_for_gpu);
-        println!("    radix 8 dif inv for gpu {:?}", duration_radix_8_dif_inv_for_gpu);
-        println!("    radix 4 dit fwd for gpu {:?}", duration_radix_4_dit_fwd_for_gpu);
-        println!("    radix 4 dif inv for gpu {:?}", duration_radix_4_dif_inv_for_gpu);
+        println!(
+            "    radix 8 dit fwd for gpu {:?}",
+            duration_radix_8_dit_fwd_for_gpu
+        );
+        println!(
+            "    radix 8 dif inv for gpu {:?}",
+            duration_radix_8_dif_inv_for_gpu
+        );
+        println!(
+            "    radix 4 dit fwd for gpu {:?}",
+            duration_radix_4_dit_fwd_for_gpu
+        );
+        println!(
+            "    radix 4 dif inv for gpu {:?}",
+            duration_radix_4_dif_inv_for_gpu
+        );
         println!("    bitrev      {:?}", duration_bitrev);
         println!(
             "    bw bound estimates {:?} {:?}",
