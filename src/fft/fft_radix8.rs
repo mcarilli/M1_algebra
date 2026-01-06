@@ -6,10 +6,14 @@ type M31F = Mersenne31Field;
 type M31C = Mersenne31Complex;
 
 // Roots of unity needed by size_8_dit
-// Friendlier values could be obtained with a different 2-adic generator.
+// I think a different 2-adic generator would just shuffle these around.
 const W_1_8: M31C = M31C::new(M31F::new(32768), M31F::new(2147450879));
 const W_1_4: M31C = M31C::new(M31F::new(0), M31F::new(2147483646));
 const W_3_8: M31C = M31C::new(M31F::new(2147450879), M31F::new(2147450879));
+
+const W_1_8_INV: M31C = M31C::new(M31F::new(32768), M31F::new(32768));
+const W_1_4_INV: M31C = M31C::new(M31F::new(0), M31F::new(1));
+const W_3_8_INV: M31C = M31C::new(M31F::new(2147450879), M31F::new(32768));
 
 // Optimized special-case math could go here.
 fn mul_assign_w_1_8(x: &mut M31C) {
@@ -508,6 +512,7 @@ fn radix_n_dit_fwd_for_gpu<T: Radix>(x: &mut [M31C], twiddles: &[M31C]) {
     let mut exchg_region_size = x.len();
     let mut num_exchg_regions = 1;
     let mut independent_fft_len = T::RADIX;
+
     for stage in 0..num_stages {
         let exchg_stride = exchg_region_size / T::RADIX;
 
@@ -602,10 +607,13 @@ fn test_compare() {
         distribute_powers, domain_generator_for_size, precompute_twiddles_for_fft,
     };
     use crate::worker::Worker;
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
     use std::time::{Duration, Instant};
 
     let worker = Worker::new();
-    let mut rng = rand::thread_rng();
+    // let mut rng = rand::thread_rng();
+    let mut rng: StdRng = SeedableRng::seed_from_u64(5);
 
     fn flush(x: &[M31C], y: &mut [M31C]) -> Duration {
         let start = Instant::now();
@@ -641,10 +649,11 @@ fn test_compare() {
         duration
     }
 
-    for log_n in 12..13 {
+    for log_n in 18..19 {
         let n = 1 << log_n;
 
-        let input: Vec<M31C> = (0..n).map(|_| rand_from_rng(&mut rng)).collect();
+        // let input: Vec<M31C> = (0..n).map(|_| rand_from_rng(&mut rng)).collect();
+        let input: Vec<M31C> = (0..n as u32).map(|i| M31C::new(M31F::new((i + 1) % 7), M31F::new((i + 2) % 7))).collect();
 
         let x_flush = input.clone();
         let mut y_flush = input.clone();
@@ -705,6 +714,7 @@ fn test_compare() {
             |x, y| {
                 radix_n_dit_fwd_for_gpu::<Radix8>(x, &twiddles);
                 for i in 0..x.len() {
+                    // println!("{} {} {}", i, x[i].real_part, x[i].imag_part);
                     y[i] = x[bitrev_by_radix::<Radix8>(i, log_n as usize)];
                 }
             },
@@ -793,4 +803,8 @@ fn test_compare() {
             bandwidth_bound_estimate_0, bandwidth_bound_estimate_1
         );
     }
+
+    assert_eq!(*W_1_8.clone().mul_assign(&W_1_8_INV), M31C::ONE);
+    assert_eq!(*W_1_4.clone().mul_assign(&W_1_4_INV), M31C::ONE);
+    assert_eq!(*W_3_8.clone().mul_assign(&W_3_8_INV), M31C::ONE);
 }
